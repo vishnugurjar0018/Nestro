@@ -2,7 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import {
+    increaseQuantity,
+    decreaseQuantity,
+    removeFromCart,
+    clearCart,
+} from "@/redux/cartSlice";
 
 
 /* =========================================================
@@ -37,187 +43,50 @@ function formatPrice(value) {
 
 export default function CartPage() {
 
-    const [
-        cartItems,
-        setCartItems
-    ] = useState([]);
+    const dispatch = useDispatch();
 
-    const [
-        mounted,
-        setMounted
-    ] = useState(false);
-
-
-    /* =====================================================
-       LOAD CART
-    ===================================================== */
-
-    useEffect(() => {
-
-        setMounted(true);
-
-        try {
-
-            const savedCart =
-                localStorage.getItem(
-                    "cart"
-                );
-
-            if (savedCart) {
-
-                const parsedCart =
-                    JSON.parse(
-                        savedCart
-                    );
-
-                if (
-                    Array.isArray(
-                        parsedCart
-                    )
-                ) {
-
-                    setCartItems(
-                        parsedCart
-                    );
-
-                }
-
-            }
-
-        } catch (error) {
-
-            console.error(
-                "Cart Load Error:",
-                error
-            );
-
-        }
-
-    }, []);
-
-
-    /* =====================================================
-       SAVE CART
-    ===================================================== */
-
-    useEffect(() => {
-
-        if (!mounted) {
-            return;
-        }
-
-        try {
-
-            localStorage.setItem(
-                "cart",
-                JSON.stringify(
-                    cartItems
-                )
-            );
-
-        } catch (error) {
-
-            console.error(
-                "Cart Save Error:",
-                error
-            );
-
-        }
-
-    }, [
-        cartItems,
-        mounted
-    ]);
+    const cartItems = useSelector(
+        (state) => state.cart.items
+    );
 
 
     /* =====================================================
        UPDATE QUANTITY
     ===================================================== */
 
-    const updateQuantity = (
-        productId,
-        quantity
-    ) => {
+    const updateQuantity = (productId, currentQuantity, nextQuantity) => {
 
-        if (quantity < 1) {
+        if (nextQuantity < 1) {
             return;
         }
 
-        setCartItems(
-            (currentItems) =>
-                currentItems.map(
-                    (item) => {
-
-                        const id =
-                            item._id ||
-                            item.id ||
-                            item.productId;
-
-                        if (
-                            String(id) !==
-                            String(productId)
-                        ) {
-
-                            return item;
-
-                        }
-
-                        return {
-                            ...item,
-                            quantity:
-                                quantity
-                        };
-
-                    }
-                )
-        );
-
+        if (nextQuantity > currentQuantity) {
+            dispatch(increaseQuantity(productId));
+        } else if (nextQuantity < currentQuantity) {
+            dispatch(decreaseQuantity(productId));
+        }
     };
 
 
     /* =====================================================
-       REMOVE PRODUCT
+       REMOVE / CLEAR CART
     ===================================================== */
 
-    const removeItem = (
-        productId
-    ) => {
-
-        setCartItems(
-            (currentItems) =>
-                currentItems.filter(
-                    (item) => {
-
-                        const id =
-                            item._id ||
-                            item.id ||
-                            item.productId;
-
-                        return (
-                            String(id) !==
-                            String(productId)
-                        );
-
-                    }
-                )
-        );
-
+    const removeItem = (productId) => {
+        dispatch(removeFromCart(productId));
     };
 
-
-    /* =====================================================
-       CLEAR CART
-    ===================================================== */
-
-    const clearCart = () => {
-
-        setCartItems([]);
-
+    const handleClearCart = () => {
+        dispatch(clearCart());
     };
 
 
     /* =====================================================
        CALCULATE SUBTOTAL
+    ===================================================== */
+
+    /* =====================================================
+       CART PRICE TOTALS
     ===================================================== */
 
     const subtotal =
@@ -227,9 +96,11 @@ export default function CartPage() {
                 item
             ) => {
 
-                const price =
+                const salePrice =
                     Number(
                         item.finalPrice ??
+                        item.salePrice ??
+                        item.discountedPrice ??
                         item.price ??
                         0
                     );
@@ -242,7 +113,7 @@ export default function CartPage() {
 
                 return (
                     total +
-                    price *
+                    salePrice *
                         quantity
                 );
 
@@ -251,28 +122,48 @@ export default function CartPage() {
         );
 
 
-    /* =====================================================
-       DISCOUNT
-    ===================================================== */
-
-    const discount =
+    const originalTotal =
         cartItems.reduce(
             (
                 total,
                 item
             ) => {
 
-                const price =
+                const salePrice =
                     Number(
-                        item.price ||
+                        item.finalPrice ??
+                        item.salePrice ??
+                        item.discountedPrice ??
+                        item.price ??
                         0
                     );
 
-                const finalPrice =
+                const explicitOriginal =
                     Number(
-                        item.finalPrice ??
-                        price
+                        item.originalPrice ??
+                        item.mrp ??
+                        item.mrpPrice ??
+                        0
                     );
+
+                const discountPercent =
+                    Number(
+                        item.discountPercentage ??
+                        item.discountPercent ??
+                        0
+                    );
+
+                const originalPrice =
+                    explicitOriginal > 0
+                        ? explicitOriginal
+                        : discountPercent > 0
+                            ? Math.round(
+                                  salePrice /
+                                      (1 -
+                                          discountPercent /
+                                              100)
+                              )
+                            : salePrice;
 
                 const quantity =
                     Number(
@@ -282,15 +173,19 @@ export default function CartPage() {
 
                 return (
                     total +
-                    Math.max(
-                        price -
-                            finalPrice,
-                        0
-                    ) *
+                    originalPrice *
                         quantity
                 );
 
             },
+            0
+        );
+
+
+    const discount =
+        Math.max(
+            originalTotal -
+                subtotal,
             0
         );
 
@@ -338,24 +233,6 @@ export default function CartPage() {
                 100,
             100
         );
-
-
-    /* =====================================================
-       LOADING
-    ===================================================== */
-
-    if (!mounted) {
-
-        return (
-            <main
-                className="
-                    min-h-screen
-                    bg-[#faf8f5]
-                "
-            />
-        );
-
-    }
 
 
     /* =====================================================
@@ -852,7 +729,7 @@ export default function CartPage() {
                             <button
                                 type="button"
                                 onClick={
-                                    clearCart
+                                    handleClearCart
                                 }
                                 className="
                                     text-xs
@@ -879,8 +756,8 @@ export default function CartPage() {
                                 ) => {
 
                                     const productId =
-                                        item._id ||
                                         item.id ||
+                                        item._id ||
                                         item.productId ||
                                         index;
 
@@ -903,18 +780,79 @@ export default function CartPage() {
                                         item.images?.[0] ||
                                         "";
 
-                                    const price =
+                                    // Original / Sale price
+                                    /*
+                                     * PRICE DATA
+                                     *
+                                     * Supported product fields:
+                                     * originalPrice / mrp / price  -> original price
+                                     * finalPrice / salePrice       -> selling price
+                                     *
+                                     * If your API sends a discount percentage,
+                                     * we can also calculate the original price.
+                                     */
+                                    const salePrice =
                                         Number(
                                             item.finalPrice ??
+                                            item.salePrice ??
+                                            item.discountedPrice ??
                                             item.price ??
                                             0
                                         );
+
+                                    const discountPercentFromData =
+                                        Number(
+                                            item.discountPercentage ??
+                                            item.discountPercent ??
+                                            0
+                                        );
+
+                                    const explicitOriginalPrice =
+                                        Number(
+                                            item.originalPrice ??
+                                            item.mrp ??
+                                            item.mrpPrice ??
+                                            0
+                                        );
+
+                                    const originalPrice =
+                                        explicitOriginalPrice > 0
+                                            ? explicitOriginalPrice
+                                            : discountPercentFromData > 0 &&
+                                              salePrice > 0
+                                                ? Math.round(
+                                                      salePrice /
+                                                          (1 -
+                                                              discountPercentFromData /
+                                                                  100)
+                                                  )
+                                                : salePrice;
 
                                     const quantity =
                                         Number(
                                             item.quantity ||
                                             1
                                         );
+
+                                    const itemDiscount =
+                                        Math.max(
+                                            originalPrice -
+                                                salePrice,
+                                            0
+                                        );
+
+                                    const discountPercent =
+                                        originalPrice > salePrice
+                                            ? discountPercentFromData > 0
+                                                ? Math.round(
+                                                      discountPercentFromData
+                                                  )
+                                                : Math.round(
+                                                      (itemDiscount /
+                                                          originalPrice) *
+                                                          100
+                                                  )
+                                            : 0;
 
                                     return (
 
@@ -1050,48 +988,91 @@ export default function CartPage() {
                                                 </Link>
 
 
-                                                {/* PRICE */}
+                                                {/* PRICE / DISCOUNT */}
 
-                                                <div
-                                                    className="
-                                                        mt-2
-                                                        flex
-                                                        items-center
-                                                        gap-2
-                                                    "
-                                                >
+                                                <div className="mt-3">
 
-                                                    <span
-                                                        className="
-                                                            text-sm
-                                                            font-semibold
-                                                            text-[#211812]
-                                                        "
-                                                    >
-                                                        {formatPrice(
-                                                            price
-                                                        )}
-                                                    </span>
+                                                    <div className="flex flex-wrap items-center gap-2">
 
-
-                                                    {item.price &&
-                                                        Number(
-                                                            item.price
-                                                        ) >
-                                                            price && (
-
+                                                        {/* SALE PRICE */}
                                                         <span
                                                             className="
-                                                                text-xs
-                                                                text-[#a3958b]
-                                                                line-through
+                                                                text-lg
+                                                                font-bold
+                                                                tracking-tight
+                                                                text-[#211812]
                                                             "
                                                         >
                                                             {formatPrice(
-                                                                item.price
+                                                                salePrice
                                                             )}
                                                         </span>
 
+                                                        {/* DISCOUNT BADGE */}
+                                                        {discountPercent > 0 && (
+                                                            <span
+                                                                className="
+                                                                    inline-flex
+                                                                    items-center
+                                                                    rounded-full
+                                                                    bg-[#f1e1d3]
+                                                                    px-2.5
+                                                                    py-1
+                                                                    text-[10px]
+                                                                    font-bold
+                                                                    uppercase
+                                                                    tracking-wide
+                                                                    text-[#9a6845]
+                                                                "
+                                                            >
+                                                                {discountPercent}% OFF
+                                                            </span>
+                                                        )}
+
+                                                        {/* ORIGINAL PRICE */}
+                                                        {discountPercent > 0 && (
+                                                            <span
+                                                                className="
+                                                                    text-sm
+                                                                    font-medium
+                                                                    text-[#a3958b]
+                                                                    line-through
+                                                                "
+                                                            >
+                                                                {formatPrice(
+                                                                    originalPrice
+                                                                )}
+                                                            </span>
+                                                        )}
+
+                                                    </div>
+
+                                                    {/* SAVING */}
+                                                    {itemDiscount > 0 && (
+                                                        <div
+                                                            className="
+                                                                mt-2
+                                                                inline-flex
+                                                                items-center
+                                                                gap-1.5
+                                                                rounded-md
+                                                                bg-[#eef5e9]
+                                                                px-2.5
+                                                                py-1.5
+                                                                text-xs
+                                                                font-medium
+                                                                text-[#5f7d4e]
+                                                            "
+                                                        >
+                                                            <span>✓</span>
+                                                            <span>
+                                                                You save{" "}
+                                                                {formatPrice(
+                                                                    itemDiscount
+                                                                )}{" "}
+                                                                per item
+                                                            </span>
+                                                        </div>
                                                     )}
 
                                                 </div>
@@ -1125,10 +1106,8 @@ export default function CartPage() {
                                                         <button
                                                             type="button"
                                                             onClick={() =>
-                                                                updateQuantity(
-                                                                    productId,
-                                                                    quantity -
-                                                                        1
+                                                                dispatch(
+                                                                    decreaseQuantity(productId)
                                                                 )
                                                             }
                                                             disabled={
@@ -1178,10 +1157,8 @@ export default function CartPage() {
                                                         <button
                                                             type="button"
                                                             onClick={() =>
-                                                                updateQuantity(
-                                                                    productId,
-                                                                    quantity +
-                                                                        1
+                                                                dispatch(
+                                                                    increaseQuantity(productId)
                                                                 )
                                                             }
                                                             aria-label="Increase quantity"
@@ -1205,8 +1182,8 @@ export default function CartPage() {
                                                     <button
                                                         type="button"
                                                         onClick={() =>
-                                                            removeItem(
-                                                                productId
+                                                            dispatch(
+                                                                removeFromCart(productId)
                                                             )
                                                         }
                                                         className="
@@ -1313,23 +1290,56 @@ export default function CartPage() {
                                     "
                                 >
 
+                                    {/* ORIGINAL PRICE */}
+
                                     <div
                                         className="
                                             flex
                                             items-center
                                             justify-between
                                             text-sm
-                                            text-white/65
+                                            text-white/55
                                         "
                                     >
 
                                         <span>
-                                            Subtotal
+                                            Original Price
                                         </span>
 
                                         <span
                                             className="
                                                 font-medium
+                                                text-white/55
+                                                line-through
+                                            "
+                                        >
+                                            {formatPrice(
+                                                originalTotal
+                                            )}
+                                        </span>
+
+                                    </div>
+
+
+                                    {/* SALE PRICE */}
+
+                                    <div
+                                        className="
+                                            flex
+                                            items-center
+                                            justify-between
+                                            text-sm
+                                            text-white/75
+                                        "
+                                    >
+
+                                        <span>
+                                            Sale Price
+                                        </span>
+
+                                        <span
+                                            className="
+                                                font-semibold
                                                 text-white
                                             "
                                         >
@@ -1341,6 +1351,8 @@ export default function CartPage() {
                                     </div>
 
 
+                                    {/* TOTAL SAVING */}
+
                                     {discount > 0 && (
 
                                         <div
@@ -1348,18 +1360,43 @@ export default function CartPage() {
                                                 flex
                                                 items-center
                                                 justify-between
+                                                rounded-xl
+                                                border
+                                                border-[#c18a5d]/20
+                                                bg-[#c18a5d]/10
+                                                px-3
+                                                py-2.5
                                                 text-sm
-                                                text-white/65
+                                                text-white/70
                                             "
                                         >
 
-                                            <span>
-                                                Discount
+                                            <span className="flex items-center gap-2">
+                                                <span
+                                                    className="
+                                                        flex
+                                                        h-5
+                                                        w-5
+                                                        items-center
+                                                        justify-center
+                                                        rounded-full
+                                                        bg-[#c18a5d]/20
+                                                        text-[10px]
+                                                        font-bold
+                                                        text-[#d9a67c]
+                                                    "
+                                                >
+                                                    %
+                                                </span>
+
+                                                <span>
+                                                    You Save
+                                                </span>
                                             </span>
 
                                             <span
                                                 className="
-                                                    font-medium
+                                                    font-bold
                                                     text-[#d9a67c]
                                                 "
                                             >

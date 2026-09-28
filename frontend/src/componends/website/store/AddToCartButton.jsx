@@ -1,74 +1,30 @@
 "use client";
 
 import { useState } from "react";
+import { useDispatch } from "react-redux";
+import { addToCart } from "@/redux/cartSlice";
 
-export default function AddToCartButton({
-    product,
-}) {
-    const [added, setAdded] =
-        useState(false);
+export default function AddToCartButton({ product }) {
+    const [added, setAdded] = useState(false);
+
+    const dispatch = useDispatch();
 
     const handleAddToCart = () => {
+        // Product check
         if (!product?._id) {
             return;
         }
 
         try {
-            const existingCart =
-                JSON.parse(
-                    localStorage.getItem(
-                        "cart"
-                    ) || "[]"
-                );
-
-            const existingProduct =
-                existingCart.find(
-                    (item) =>
-                        item._id ===
-                        product._id
-                );
-
-            let updatedCart;
-
-            if (existingProduct) {
-                updatedCart =
-                    existingCart.map(
-                        (item) =>
-                            item._id ===
-                            product._id
-                                ? {
-                                      ...item,
-                                      quantity:
-                                          (item.quantity ||
-                                              1) + 1,
-                                  }
-                                : item
-                    );
-            } else {
-                updatedCart = [
-                    ...existingCart,
-                    {
-                        ...product,
-                        quantity: 1,
-                    },
-                ];
-            }
-
-            localStorage.setItem(
-                "cart",
-                JSON.stringify(
-                    updatedCart
-                )
+            // Redux me product add karo
+            dispatch(
+                addToCart({
+                    ...product,
+                    id: product._id,
+                })
             );
 
-            /*
-             * Cart components can listen
-             * for this event later.
-             */
-            window.dispatchEvent(
-                new Event("cartUpdated")
-            );
-
+            // Button status
             setAdded(true);
 
             setTimeout(() => {
@@ -76,10 +32,7 @@ export default function AddToCartButton({
             }, 1500);
 
         } catch (error) {
-            console.error(
-                "Add to cart error:",
-                error
-            );
+            console.error("Add to cart error:", error);
         }
     };
 
@@ -87,7 +40,9 @@ export default function AddToCartButton({
         <button
             type="button"
             onClick={handleAddToCart}
-            aria-label={`Add ${product?.name || "product"} to cart`}
+            aria-label={`Add ${
+                product?.name || "product"
+            } to cart`}
             className="
                 w-full
                 rounded-xl

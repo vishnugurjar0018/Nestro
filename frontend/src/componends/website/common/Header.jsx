@@ -1,9 +1,10 @@
 "use client";
 
 import React, {
-    useEffect,
     useState,
 } from "react";
+
+import { useSelector } from "react-redux";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -25,12 +26,6 @@ export default function Header() {
     ] = useState(false);
 
 
-    const [
-        cartCount,
-        setCartCount
-    ] = useState(0);
-
-
     const pathname =
         usePathname();
 
@@ -45,123 +40,18 @@ export default function Header() {
 
 
     /* =====================================================
-       GET CART COUNT
+       REDUX CART COUNT
     ===================================================== */
 
-    const updateCartCount = () => {
+    const cartItems = useSelector(
+        (state) => state.cart.items
+    );
 
-        try {
-
-            const savedCart =
-                localStorage.getItem(
-                    "cart"
-                );
-
-
-            if (!savedCart) {
-
-                setCartCount(0);
-
-                return;
-            }
-
-
-            const cart =
-                JSON.parse(
-                    savedCart
-                );
-
-
-            if (
-                !Array.isArray(cart)
-            ) {
-
-                setCartCount(0);
-
-                return;
-            }
-
-
-            const totalQuantity =
-                cart.reduce(
-                    (
-                        total,
-                        item
-                    ) => {
-
-                        return (
-                            total +
-                            Number(
-                                item?.quantity ||
-                                1
-                            )
-                        );
-
-                    },
-                    0
-                );
-
-
-            setCartCount(
-                totalQuantity
-            );
-
-
-        } catch (error) {
-
-            console.error(
-                "Header Cart Count Error:",
-                error
-            );
-
-
-            setCartCount(0);
-
-        }
-
-    };
-
-
-    /* =====================================================
-       CART LISTENERS
-    ===================================================== */
-
-    useEffect(() => {
-
-        // Initial cart count
-        updateCartCount();
-
-
-        // Same browser tab
-        window.addEventListener(
-            "cartUpdated",
-            updateCartCount
-        );
-
-
-        // Other browser tabs
-        window.addEventListener(
-            "storage",
-            updateCartCount
-        );
-
-
-        return () => {
-
-            window.removeEventListener(
-                "cartUpdated",
-                updateCartCount
-            );
-
-
-            window.removeEventListener(
-                "storage",
-                updateCartCount
-            );
-
-        };
-
-    }, []);
+    const cartCount = cartItems.reduce(
+        (total, item) =>
+            total + (Number(item?.quantity) || 1),
+        0
+    );
 
 
     /* =====================================================
